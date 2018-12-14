@@ -30,7 +30,7 @@ import {
 import { IAsyncDisposableRegistry, IConfigurationService, IDisposableRegistry, ILogger } from '../../client/common/types';
 import { Architecture } from '../../client/common/utils/platform';
 import { EXTENSION_ROOT_DIR } from '../../client/constants';
-import { JupyterExecution } from '../../client/datascience/jupyterExecution';
+import { JupyterExecution } from '../../client/datascience/jupyter/jupyterExecution';
 import { ICell, IConnection, IJupyterKernelSpec, INotebookServer, InterruptResult } from '../../client/datascience/types';
 import { InterpreterType, PythonInterpreter } from '../../client/interpreter/contracts';
 import { InterpreterService } from '../../client/interpreter/interpreterService';
@@ -39,6 +39,8 @@ import { KnownSearchPathsForInterpreters } from '../../client/interpreter/locato
 import { ServiceContainer } from '../../client/ioc/container';
 import { getOSType, OSType } from '../common';
 import { noop } from '../core';
+import { ServiceManager } from '../../client/ioc/serviceManager';
+import { MockJupyterManager } from './mockJupyterManager';
 
 // tslint:disable:no-any no-http-string no-multiline-string max-func-body-length
 class MockJupyterServer implements INotebookServer {
@@ -450,6 +452,10 @@ suite('Jupyter Execution', async () => {
         when(fileSystem.createDirectory(anything())).thenResolve();
         when(fileSystem.deleteDirectory(anything())).thenResolve();
 
+        const serviceManager = mock(ServiceManager);
+
+        const mockSessionManager = new MockJupyterManager(instance(serviceManager));
+
         return new JupyterExecution(
             instance(executionFactory),
             instance(condaService),
@@ -460,6 +466,7 @@ suite('Jupyter Execution', async () => {
             disposableRegistry,
             disposableRegistry,
             instance(fileSystem),
+            mockSessionManager,
             instance(serviceContainer));
     }
 

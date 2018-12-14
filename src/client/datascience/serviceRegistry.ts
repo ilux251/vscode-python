@@ -9,10 +9,10 @@ import { CodeWatcher } from './editor-integration/codewatcher';
 import { History } from './history';
 import { HistoryCommandListener } from './historycommandlistener';
 import { HistoryProvider } from './historyProvider';
-import { JupyterExecution } from './jupyterExecution';
-import { JupyterExporter } from './jupyterExporter';
-import { JupyterImporter } from './jupyterImporter';
-import { JupyterServer } from './jupyterServer';
+import { JupyterExecution } from './jupyter/jupyterExecution';
+import { JupyterExporter } from './jupyter/jupyterExporter';
+import { JupyterImporter } from './jupyter/jupyterImporter';
+import { JupyterServer } from './jupyter/jupyterServer';
 import { StatusProvider } from './statusProvider';
 import {
     ICodeCssGenerator,
@@ -26,8 +26,11 @@ import {
     INotebookExporter,
     INotebookImporter,
     INotebookServer,
-    IStatusProvider
+    IStatusProvider,
+    IJupyterSessionManager,
+    IJupyterSession
 } from './types';
+import { JupyterSessionManager } from './jupyter/jupyterSessionManager';
 
 export function registerTypes(serviceManager: IServiceManager) {
     serviceManager.addSingleton<IDataScienceCodeLensProvider>(IDataScienceCodeLensProvider, DataScienceCodeLensProvider);
@@ -41,5 +44,6 @@ export function registerTypes(serviceManager: IServiceManager) {
     serviceManager.add<INotebookServer>(INotebookServer, JupyterServer);
     serviceManager.addSingleton<ICodeCssGenerator>(ICodeCssGenerator, CodeCssGenerator);
     serviceManager.addSingleton<IStatusProvider>(IStatusProvider, StatusProvider);
+    serviceManager.addSingleton<IJupyterSessionManager>(IJupyterSessionManager, JupyterSessionManager);
     serviceManager.add<ICodeWatcher>(ICodeWatcher, CodeWatcher);
 }

@@ -9,14 +9,14 @@ import * as path from 'path';
 import { Disposable, Uri } from 'vscode';
 import { CancellationToken, CancellationTokenSource } from 'vscode-jsonrpc';
 
-import { CancellationError } from '../../client/common/cancellation';
+import { CancellationError, Cancellation } from '../../client/common/cancellation';
 import { EXTENSION_ROOT_DIR } from '../../client/common/constants';
 import { IFileSystem } from '../../client/common/platform/types';
 import { IProcessServiceFactory } from '../../client/common/process/types';
 import { createDeferred } from '../../client/common/utils/async';
 import { noop } from '../../client/common/utils/misc';
 import { concatMultilineString } from '../../client/datascience/common';
-import { JupyterExecution } from '../../client/datascience/jupyterExecution';
+import { JupyterExecution } from '../../client/datascience/jupyter/jupyterExecution';
 import {
     CellState,
     ICell,
@@ -29,12 +29,15 @@ import {
 import {
     IInterpreterService,
     IKnownSearchPathsForInterpreters,
-    PythonInterpreter
+    PythonInterpreter,
+    InterpreterType
 } from '../../client/interpreter/contracts';
 import { ICellViewModel } from '../../datascience-ui/history-react/cell';
 import { generateTestState } from '../../datascience-ui/history-react/mainPanelState';
 import { sleep } from '../core';
 import { DataScienceIocContainer } from './dataScienceIocContainer';
+import { Architecture } from '../../client/common/utils/platform';
+import { SupportedCommands } from './mockJupyterManager';
 
 // tslint:disable:no-any no-multiline-string max-func-body-length no-console max-classes-per-file
 suite('Jupyter notebook tests', () => {
@@ -44,11 +47,24 @@ suite('Jupyter notebook tests', () => {
     let ioc: DataScienceIocContainer;
     let modifiedConfig = false;
 
+    const workingPython: PythonInterpreter = {
+        path: '/foo/bar/python.exe',
+        version: '3.6.6.6',
+        sysVersion: '1.0.0.0',
+        sysPrefix: 'Python',
+        type: InterpreterType.Unknown,
+        architecture: Architecture.x64,
+        version_info: [3, 6, 6, 'final']
+    };
+
     setup(() => {
         ioc = new DataScienceIocContainer();
         ioc.registerDataScienceTypes();
         jupyterExecution = ioc.serviceManager.get<IJupyterExecution>(IJupyterExecution);
         processFactory = ioc.serviceManager.get<IProcessServiceFactory>(IProcessServiceFactory);
+        if (ioc.mockJupyter) {
+            ioc.mockJupyter.addInterpreter(workingPython, SupportedCommands.all);
+        }
     });
 
     teardown(async () => {
@@ -154,15 +170,16 @@ suite('Jupyter notebook tests', () => {
         }
     }
 
-    function testMimeTypes(types : {code: string; mimeType: string; cellType: string; verifyValue(data: any): void}[]) {
+    function testMimeTypes(types : {code: string; mimeType: string; result: any, cellType: string; verifyValue(data: any): void}[]) {
         runTest('MimeTypes', async () => {
+            // Prefill with the output (This is only necessary for mocking)
+            types.forEach(t => {
+                addMockData(t.code, t.result, t.mimeType, t.cellType);
+            })
+
             // Test all mime types together so we don't have to startup and shutdown between
             // each
-            const mimeTestDir = path.join(EXTENSION_ROOT_DIR, 'src', 'test', 'datascience');
-            const server = await jupyterExecution.connectToNotebookServer(undefined, true, undefined, mimeTestDir);
-            if (!server) {
-                assert.fail('Server not created');
-            }
+            const server = await createNotebookServer(true);
             let statusCount: number = 0;
             if (server) {
                 server.onStatusChanged((bool: boolean) => {
@@ -191,11 +208,40 @@ suite('Jupyter notebook tests', () => {
         });
     }
 
-    runTest('Creation', async () => {
-        const server = await jupyterExecution.connectToNotebookServer(undefined, true);
-        if (!server) {
-            assert.fail('Server not created');
+    async function createNotebookServer(useDefaultConfig: boolean, expectFailure?: boolean) : Promise<INotebookServer | undefined> {
+        // Catch exceptions. Throw a specific assertion if the promise fails
+        try {
+            const testDir = path.join(EXTENSION_ROOT_DIR, 'src', 'test', 'datascience');
+            const server = await jupyterExecution.connectToNotebookServer(undefined, useDefaultConfig, undefined, testDir);
+            if (expectFailure) {
+                assert.ok(false, `Expected server to not be created`);
+            }
+            return server;
+        } catch (exc) {
+            if (!expectFailure) {
+                assert.ok(false, `Expected server to be created, but got ${exc}`);
+            }
         }
+    }
+
+    function addMockData(code: string, result: string | number, mimeType?: string, cellType?: string) {
+        if (ioc.mockJupyter) {
+            if (cellType && cellType === 'error') {
+                ioc.mockJupyter.addError(code, result.toString());
+            } else {
+                ioc.mockJupyter.addCell(code, result, mimeType);
+            }
+        }
+    }
+
+    function addInterruptableMockData(code: string, resultGenerator: (c: CancellationToken) => Promise<{result: string, haveMore: boolean}>) {
+        if (ioc.mockJupyter) {
+            ioc.mockJupyter.addContinuousOutputCell(code, resultGenerator);
+        }
+    }
+
+    runTest('Creation', async () => {
+        await createNotebookServer(true);
     });
 
     runTest('Failure', async () => {
@@ -207,9 +253,7 @@ suite('Jupyter notebook tests', () => {
         }
         ioc.serviceManager.rebind<IJupyterExecution>(IJupyterExecution, FailedProcess);
         jupyterExecution = ioc.serviceManager.get<IJupyterExecution>(IJupyterExecution);
-        return assertThrows(async () => {
-            await jupyterExecution.connectToNotebookServer(undefined, true);
-        }, 'Server start is not throwing');
+        await createNotebookServer(true, true);
     });
 
     test('Not installed', async () => {
@@ -251,10 +295,7 @@ suite('Jupyter notebook tests', () => {
         ioc.serviceManager.rebind<IInterpreterService>(IInterpreterService, EmptyInterpreterService);
         ioc.serviceManager.rebind<IKnownSearchPathsForInterpreters>(IKnownSearchPathsForInterpreters, EmptyPathService);
         jupyterExecution = ioc.serviceManager.get<IJupyterExecution>(IJupyterExecution);
-
-        return assertThrows(async () => {
-            await jupyterExecution.connectToNotebookServer(undefined, true);
-        }, 'Server start is not throwing');
+        await createNotebookServer(true, true);
     });
 
     runTest('Export/Import', async () => {
@@ -300,10 +341,12 @@ suite('Jupyter notebook tests', () => {
     });
 
     runTest('Restart kernel', async () => {
-        const server = await jupyterExecution.connectToNotebookServer(undefined, true);
-        if (!server) {
-            assert.fail('Server not created');
-        }
+        addMockData(`a=1${os.EOL}a`, 1);
+        addMockData(`a+=1${os.EOL}a`, 2);
+        addMockData(`a+=4${os.EOL}a`, 6);
+        addMockData('a', `name 'a' is not defined`, 'error');
+
+        const server = await createNotebookServer(true);
 
         // Setup some state and verify output is correct
         await verifySimple(server, `a=1${os.EOL}a`, 1);
@@ -366,8 +409,17 @@ suite('Jupyter notebook tests', () => {
     }
 
     runTest('Cancel execution', async () => {
+        if (ioc.mockJupyter) {
+            ioc.mockJupyter.setProcessDelay(2000);
+            addMockData(`a=1${os.EOL}a`, 1);
+        }
+
         // Try different timeouts, canceling after the timeout on each
         assert.ok(await testCancelableMethod((t: CancellationToken) => jupyterExecution.connectToNotebookServer(undefined, true, t), 'Cancel did not cancel start after {0}ms'));
+
+        if (ioc.mockJupyter) {
+            ioc.mockJupyter.setProcessDelay(undefined);
+        }
 
         // Make sure doing normal start still works
         const nonCancelSource = new CancellationTokenSource();
@@ -376,6 +428,10 @@ suite('Jupyter notebook tests', () => {
 
         // Make sure can run some code too
         await verifySimple(server, `a=1${os.EOL}a`, 1);
+
+        if (ioc.mockJupyter) {
+            ioc.mockJupyter.setProcessDelay(200);
+        }
 
         // Force a settings changed so that all of the cached data is cleared
         ioc.forceSettingsChanged();
@@ -390,6 +446,7 @@ suite('Jupyter notebook tests', () => {
         let interrupted = false;
         let finishedBefore = false;
         const finishedPromise = createDeferred();
+        let error;
         const observable = server!.executeObservable(code, 'foo.py', 0);
         let cells : ICell[] = [];
         observable.subscribe(c => {
@@ -402,7 +459,7 @@ suite('Jupyter notebook tests', () => {
                 finishedBefore = !interrupted;
                 finishedPromise.resolve();
             }
-        }, (err) => finishedPromise.reject(err), () => finishedPromise.resolve());
+        }, (err) => { error = err; finishedPromise.resolve(); }, () => finishedPromise.resolve());
 
         // Then interrupt
         interrupted = true;
@@ -411,6 +468,7 @@ suite('Jupyter notebook tests', () => {
         // Then we should get our finish unless there was a restart
         await Promise.race([finishedPromise.promise, sleep(sleepMs)]);
         assert.equal(finishedBefore, false, 'Finished before the interruption');
+        assert.equal(error, undefined, 'Error thrown during interrupt');
         assert.ok(finishedPromise.completed ||
             result === InterruptResult.TimedOut ||
             result === InterruptResult.Restarted,
@@ -420,14 +478,7 @@ suite('Jupyter notebook tests', () => {
     }
 
     runTest('Interrupt kernel', async () => {
-        const interrTestDir = path.join(EXTENSION_ROOT_DIR, 'src', 'test', 'datascience');
-        const server = await jupyterExecution.connectToNotebookServer(undefined, true, undefined, interrTestDir);
-        if (!server) {
-            assert.fail('Server not created');
-        }
-
-        // Try with something we can interrupt
-        let interruptResult = await interruptExecute(server,
+        const returnable =
 `import signal
 import _thread
 import time
@@ -442,34 +493,71 @@ signal.signal(signal.SIGINT, handler)
 
 while keep_going:
   print(".")
-  time.sleep(.1)`, 5000, 5000);
-
-        // Try again with something that doesn't return. However it should finish before
-        // we get to our own sleep. Note: We need the print so that the test knows something happened.
-        interruptResult = await interruptExecute(server, `import time${os.EOL}time.sleep(4)${os.EOL}print("foo")`, 7000, 7000);
-
-        // Try again with something that doesn't return. Make sure it times out
-        interruptResult = await interruptExecute(server, `import time${os.EOL}time.sleep(4)${os.EOL}print("foo")`, 100, 7000);
-        assert.equal(interruptResult, InterruptResult.TimedOut);
-
-        // The tough one, somethign that causes a kernel reset.
-        interruptResult = await interruptExecute(server,
+  time.sleep(.1)`;
+        const fourSecondSleep = `import time${os.EOL}time.sleep(4)${os.EOL}print("foo")`;
+        const kill =
 `import signal
 import time
 import os
 
 keep_going = True
 def handler(signum, frame):
-    global keep_going
-    print('signal')
-    os._exit(-2)
+  global keep_going
+  print('signal')
+  os._exit(-2)
 
 signal.signal(signal.SIGINT, handler)
 
 while keep_going:
-    print(".")
-    time.sleep(.1)`, 5000, 5000);
+  print(".")
+  time.sleep(.1)`;
 
+        // Add to our mock each of these, with each one doing something specific.
+        addInterruptableMockData(returnable, async (cancelToken: CancellationToken) => {
+            // This one goes forever until a cancellation happens
+            let haveMore = true;
+            try {
+                await Cancellation.race((t) => sleep(100), cancelToken);
+            } catch {
+                haveMore = false;
+            }
+            return { result: '.', haveMore: haveMore };
+        });
+        addInterruptableMockData(fourSecondSleep, async (cancelToken: CancellationToken) => {
+            // This one sleeps for four seconds and then it's done.
+            await sleep(4000);
+            return { result: 'foo', haveMore: false };
+        });
+        addInterruptableMockData(kill, async (cancelToken: CancellationToken) => {
+            // This one goes forever until a cancellation happens
+            let haveMore = true;
+            try {
+                await Cancellation.race((t) => sleep(100), cancelToken);
+            } catch {
+                haveMore = false;
+            }
+            return { result: '.', haveMore: haveMore };
+        });
+
+        const server = await createNotebookServer(true);
+
+        // Give some time for the server to finish. Otherwise our first interrupt will
+        // happen so fast, we'll interrupt startup.
+        await sleep(100);
+
+        // Try with something we can interrupt
+        let interruptResult = await interruptExecute(server, returnable, 1000, 1000);
+
+        // Try again with something that doesn't return. However it should finish before
+        // we get to our own sleep. Note: We need the print so that the test knows something happened.
+        interruptResult = await interruptExecute(server, fourSecondSleep, 7000, 7000);
+
+        // Try again with something that doesn't return. Make sure it times out
+        interruptResult = await interruptExecute(server, fourSecondSleep, 100, 7000);
+        assert.equal(interruptResult, InterruptResult.TimedOut);
+
+        // The tough one, somethign that causes a kernel reset.
+        interruptResult = await interruptExecute(server, kill, 1000, 1000);
     });
 
     testMimeTypes(
@@ -480,6 +568,7 @@ while keep_going:
 a`,
                 mimeType: 'text/plain',
                 cellType: 'code',
+                result: 1,
                 verifyValue: (d) => assert.equal(d, 1, 'Plain text invalid')
             },
             {
@@ -488,6 +577,7 @@ a`,
 df = pd.read("${escapePath(path.join(srcDirectory(), 'DefaultSalesReport.csv'))}")
 df.head()`,
                 mimeType: 'text/html',
+                result: `pd has no attribute 'read'`,
                 cellType: 'error',
                 // tslint:disable-next-line:quotemark
                 verifyValue: (d) => assert.ok((d as string).includes("has no attribute 'read'"), 'Unexpected error result')
@@ -498,6 +588,7 @@ df.head()`,
 df = pd.read_csv("${escapePath(path.join(srcDirectory(), 'DefaultSalesReport.csv'))}")
 df.head()`,
                 mimeType: 'text/html',
+                result: `<td>A table</td>`,
                 cellType: 'code',
                 verifyValue: (d) => assert.ok(d.toString().includes('</td>'), 'Table not found')
             },
@@ -507,6 +598,7 @@ df.head()`,
 # #HEADER`,
                 mimeType: 'text/plain',
                 cellType: 'markdown',
+                result: '#HEADER',
                 verifyValue: (d) => assert.equal(d, '#HEADER', 'Markdown incorrect')
             },
             {
@@ -517,6 +609,7 @@ df = pd.read_csv("./DefaultSalesReport.csv")
 df.head()`,
                 mimeType: 'text/html',
                 cellType: 'code',
+                result: `<td>A table</td>`,
                 verifyValue: (d) => assert.ok(d.toString().includes('</td>'), 'Table not found')
             },
             {
@@ -529,6 +622,7 @@ import pandas as pd
 x = np.linspace(0, 20, 100)
 plt.plot(x, np.sin(x))
 plt.show()`,
+                result: `00000`,
                 mimeType: 'image/png',
                 cellType: 'code',
                 verifyValue: (d) => { return; }
@@ -570,21 +664,28 @@ plt.show()`,
     }
 
     runTest('Non default config fails', async () => {
-        await generateNonDefaultConfig();
-        try {
-            await jupyterExecution.connectToNotebookServer(undefined, false);
-            assert.fail('Should not be able to connect to notebook server with bad config');
-        } catch {
-            noop();
+        if (!ioc.mockJupyter) {
+            await generateNonDefaultConfig();
+            try {
+                await createNotebookServer(false);
+                assert.fail('Should not be able to connect to notebook server with bad config');
+            } catch {
+                noop();
+            }
+        } else {
+            // In the mock case, just make sure not using a config works
+            await createNotebookServer(false);
         }
     });
 
     runTest('Non default config does not mess up default config', async () => {
-        await generateNonDefaultConfig();
-        const server = await jupyterExecution.connectToNotebookServer(undefined, true);
-        assert.ok(server, 'Never connected to a default server with a bad default config');
+        if (!ioc.mockJupyter) {
+            await generateNonDefaultConfig();
+            const server = await createNotebookServer(true);
+            assert.ok(server, 'Never connected to a default server with a bad default config');
 
-        await verifySimple(server, `a=1${os.EOL}a`, 1);
+            await verifySimple(server, `a=1${os.EOL}a`, 1);
+        }
     });
 
     // Tests that should be running:
