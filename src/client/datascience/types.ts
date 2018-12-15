@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 'use strict';
 import { nbformat } from '@jupyterlab/coreutils';
+import { Kernel, KernelMessage } from '@jupyterlab/services/lib/kernel';
 import { JSONObject } from '@phosphor/coreutils';
 import { Observable } from 'rxjs/Observable';
 import { CancellationToken, CodeLens, CodeLensProvider, Disposable, Event, Range, TextDocument, TextEditor } from 'vscode';
@@ -9,7 +10,6 @@ import { CancellationToken, CodeLens, CodeLensProvider, Disposable, Event, Range
 import { ICommandManager } from '../common/application/types';
 import { IDisposable } from '../common/types';
 import { PythonInterpreter } from '../interpreter/contracts';
-import { Kernel, KernelMessage } from '@jupyterlab/services/lib/kernel';
 
 // Main interface
 export const IDataScience = Symbol('IDataScience');
@@ -67,7 +67,7 @@ export interface IJupyterSession extends IDisposable {
     restart() : Promise<void>;
     interrupt() : Promise<void>;
     waitForIdle() : Promise<void>;
-    requestExecute(content: KernelMessage.IExecuteRequest, disposeOnDone?: boolean, metadata?: JSONObject) : Kernel.IFuture;
+    requestExecute(content: KernelMessage.IExecuteRequest, disposeOnDone?: boolean, metadata?: JSONObject) : Kernel.IFuture | undefined;
 }
 export const IJupyterSessionManager = Symbol('IJupyterSessionManager');
 export interface IJupyterSessionManager {

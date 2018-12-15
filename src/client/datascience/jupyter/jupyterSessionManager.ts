@@ -1,23 +1,13 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 'use strict';
-import { nbformat } from '@jupyterlab/coreutils';
-import { inject, injectable } from 'inversify';
-import * as uuid from 'uuid/v4';
-
-import * as os from 'os';
-import * as path from 'path';
-import { IWorkspaceService } from '../../common/application/types';
-import { IFileSystem } from '../../common/platform/types';
-import { ILogger } from '../../common/types';
-import * as localize from '../../common/utils/localize';
-import { noop } from '../../common/utils/misc';
-import { CodeSnippits, RegExpValues } from '../constants';
-import { CellState, ICell, IJupyterExecution, INotebookExporter, ISysInfo, IJupyterSessionManager, IConnection, IJupyterKernelSpec, IJupyterSession } from '../types';
-import { Session, SessionManager, ContentsManager, Contents, ServerConnection } from '@jupyterlab/services';
-import { JupyterSession } from './jupyterSession';
+import { ServerConnection, SessionManager } from '@jupyterlab/services';
+import { injectable } from 'inversify';
 import { CancellationToken } from 'vscode-jsonrpc';
+
+import { IConnection, IJupyterKernelSpec, IJupyterSession, IJupyterSessionManager } from '../types';
 import { JupyterKernelSpec } from './jupyterKernelSpec';
+import { JupyterSession } from './jupyterSession';
 
 @injectable()
 export class JupyterSessionManager implements IJupyterSessionManager {

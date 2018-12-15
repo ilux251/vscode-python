@@ -4,16 +4,7 @@
 import '../../common/extensions';
 
 import { nbformat } from '@jupyterlab/coreutils';
-import {
-    Contents,
-    ContentsManager,
-    Kernel,
-    KernelMessage,
-    ServerConnection,
-    Session,
-    SessionManager
-} from '@jupyterlab/services';
-import { Slot } from '@phosphor/signaling';
+import { Kernel, KernelMessage } from '@jupyterlab/services';
 import * as fs from 'fs-extra';
 import { inject, injectable } from 'inversify';
 import * as os from 'os';
@@ -23,14 +14,23 @@ import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-jsonrpc';
 
 import { IWorkspaceService } from '../../common/application/types';
-import { Cancellation, CancellationError } from '../../common/cancellation';
+import { CancellationError } from '../../common/cancellation';
 import { IAsyncDisposableRegistry, IDisposable, IDisposableRegistry, ILogger } from '../../common/types';
 import { createDeferred, Deferred, sleep } from '../../common/utils/async';
 import * as localize from '../../common/utils/localize';
 import { noop } from '../../common/utils/misc';
 import { generateCells } from '../cellFactory';
 import { concatMultilineString } from '../common';
-import { CellState, ICell, IConnection, IJupyterKernelSpec, INotebookServer, InterruptResult, IJupyterSessionManager, IJupyterSession } from '../types';
+import {
+    CellState,
+    ICell,
+    IConnection,
+    IJupyterKernelSpec,
+    IJupyterSession,
+    IJupyterSessionManager,
+    INotebookServer,
+    InterruptResult
+} from '../types';
 
 class CellSubscriber {
     private deferred : Deferred<CellState> = createDeferred<CellState>();

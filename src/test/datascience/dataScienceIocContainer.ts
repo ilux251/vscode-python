@@ -25,7 +25,7 @@ import { CurrentProcess } from '../../client/common/process/currentProcess';
 import { BufferDecoder } from '../../client/common/process/decoder';
 import { ProcessServiceFactory } from '../../client/common/process/processFactory';
 import { PythonExecutionFactory } from '../../client/common/process/pythonExecutionFactory';
-import { IBufferDecoder, IProcessServiceFactory, IPythonExecutionFactory, IProcessService, ExecutionResult, ObservableExecutionResult, Output, IPythonExecutionService } from '../../client/common/process/types';
+import { IBufferDecoder, IProcessServiceFactory, IPythonExecutionFactory } from '../../client/common/process/types';
 import { Bash } from '../../client/common/terminal/environmentActivationProviders/bash';
 import { CommandPromptAndPowerShell } from '../../client/common/terminal/environmentActivationProviders/commandPrompt';
 import {
@@ -52,17 +52,18 @@ import { JupyterExecution } from '../../client/datascience/jupyter/jupyterExecut
 import { JupyterExporter } from '../../client/datascience/jupyter/jupyterExporter';
 import { JupyterImporter } from '../../client/datascience/jupyter/jupyterImporter';
 import { JupyterServer } from '../../client/datascience/jupyter/jupyterServer';
+import { JupyterSessionManager } from '../../client/datascience/jupyter/jupyterSessionManager';
 import { StatusProvider } from '../../client/datascience/statusProvider';
 import {
     ICodeCssGenerator,
     IHistory,
     IHistoryProvider,
     IJupyterExecution,
+    IJupyterSessionManager,
     INotebookExporter,
     INotebookImporter,
     INotebookServer,
     IStatusProvider,
-    IJupyterSessionManager,
 } from '../../client/datascience/types';
 import { InterpreterComparer } from '../../client/interpreter/configuration/interpreterComparer';
 import { PythonPathUpdaterService } from '../../client/interpreter/configuration/pythonPathUpdaterService';
@@ -125,8 +126,6 @@ import { VirtualEnvironmentManager } from '../../client/interpreter/virtualEnvs'
 import { IVirtualEnvironmentManager } from '../../client/interpreter/virtualEnvs/types';
 import { UnitTestIocContainer } from '../unittests/serviceRegistry';
 import { MockCommandManager } from './mockCommandManager';
-import { Observable } from 'rxjs/Observable';
-import { JupyterSessionManager } from '../../client/datascience/jupyter/jupyterSessionManager';
 import { MockJupyterManager } from './mockJupyterManager';
 
 export class DataScienceIocContainer extends UnitTestIocContainer {
@@ -366,73 +365,4 @@ export class DataScienceIocContainer extends UnitTestIocContainer {
             return 'python';
         }
     }
-
-    private argsMatch(matchers: (string | RegExp)[], args: string[]): boolean {
-        if (matchers.length === args.length) {
-            return args.every((s, i) => {
-                const r = matchers[i] as RegExp;
-                return r && r.test ? r.test(s) : s === matchers[i];
-            });
-        }
-        return false;
-    }
-
-    private setupProcessServiceExec(service: TypeMoq.IMock<IProcessService>, file: string, args: (string | RegExp)[], result: Promise<ExecutionResult<string>>) {
-        service.setup(x => x.exec(
-            TypeMoq.It.isValue(file),
-            TypeMoq.It.is(a => this.argsMatch(args, a)),
-            TypeMoq.It.isAny()))
-            .returns(() => result);
-    }
-
-    private setupProcessServiceExecWithFunc(service: TypeMoq.IMock<IProcessService>, file: string, args: (string | RegExp)[], result: () => Promise<ExecutionResult<string>>) {
-        service.setup(x => x.exec(
-            TypeMoq.It.isValue(file),
-            TypeMoq.It.is(a => this.argsMatch(args, a)),
-            TypeMoq.It.isAny()))
-            .returns(result);
-    }
-
-    private setupProcessServiceExecObservable(service: TypeMoq.IMock<IProcessService>, file: string, args: (string | RegExp)[], stderr: string[], stdout: string[]) {
-        const result: ObservableExecutionResult<string> = {
-            proc: undefined,
-            out: new Observable<Output<string>>(subscriber => {
-                stderr.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-                stdout.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-            }),
-            dispose: () => {
-                noop();
-            }
-        };
-
-        service.setup(x => x.execObservable(
-            TypeMoq.It.isValue(file),
-            TypeMoq.It.is(a => this.argsMatch(args, a)),
-            TypeMoq.It.isAny()))
-            .returns(() => result);
-    }
-
-    private setupPythonService(service: TypeMoq.IMock<IPythonExecutionService>, module: string, args: (string | RegExp)[], result: Promise<ExecutionResult<string>>) {
-        service.setup(x => x.execModule(
-            TypeMoq.It.isValue(module),
-            TypeMoq.It.is(a => this.argsMatch(args, a)),
-            TypeMoq.It.isAny()))
-            .returns(() => result);
-    }
-
-    private setupMockJupyterClasses(mockJupyter: boolean) {
-        if (mockJupyter) {
-            // We need to mock the following:
-            // - IPythonExecutionFactory, IPythonExecutionService returned from the factory
-            // - IInterpreterService,
-            // - IJupyterSessionManager
-            // - IProcessExecutionFactory, IProcessExecutionService returned from the factory
-
-            // First the python execution factory
-
-        } else {
-        }
-
-    }
-
 }

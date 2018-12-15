@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 'use strict';
+// tslint:disable:no-any no-multiline-string max-func-body-length no-console max-classes-per-file trailing-comma
 import { nbformat } from '@jupyterlab/coreutils';
 import { assert } from 'chai';
 import * as fs from 'fs-extra';
@@ -9,12 +10,13 @@ import * as path from 'path';
 import { Disposable, Uri } from 'vscode';
 import { CancellationToken, CancellationTokenSource } from 'vscode-jsonrpc';
 
-import { CancellationError, Cancellation } from '../../client/common/cancellation';
+import { Cancellation, CancellationError } from '../../client/common/cancellation';
 import { EXTENSION_ROOT_DIR } from '../../client/common/constants';
 import { IFileSystem } from '../../client/common/platform/types';
 import { IProcessServiceFactory } from '../../client/common/process/types';
 import { createDeferred } from '../../client/common/utils/async';
 import { noop } from '../../client/common/utils/misc';
+import { Architecture } from '../../client/common/utils/platform';
 import { concatMultilineString } from '../../client/datascience/common';
 import { JupyterExecution } from '../../client/datascience/jupyter/jupyterExecution';
 import {
@@ -24,19 +26,18 @@ import {
     INotebookExporter,
     INotebookImporter,
     INotebookServer,
-    InterruptResult
+    InterruptResult,
 } from '../../client/datascience/types';
 import {
     IInterpreterService,
     IKnownSearchPathsForInterpreters,
+    InterpreterType,
     PythonInterpreter,
-    InterpreterType
 } from '../../client/interpreter/contracts';
 import { ICellViewModel } from '../../datascience-ui/history-react/cell';
 import { generateTestState } from '../../datascience-ui/history-react/mainPanelState';
 import { sleep } from '../core';
 import { DataScienceIocContainer } from './dataScienceIocContainer';
-import { Architecture } from '../../client/common/utils/platform';
 import { SupportedCommands } from './mockJupyterManager';
 
 // tslint:disable:no-any no-multiline-string max-func-body-length no-console max-classes-per-file
@@ -94,15 +95,6 @@ suite('Jupyter notebook tests', () => {
 
     function srcDirectory() {
         return path.join(EXTENSION_ROOT_DIR, 'src', 'test', 'datascience');
-    }
-
-    async function assertThrows(func : () => Promise<void>, message: string) {
-        try  {
-            await func();
-            assert.fail(message);
-        // tslint:disable-next-line:no-empty
-        } catch {
-        }
     }
 
     async function verifySimple(jupyterServer: INotebookServer | undefined, code: string, expectedValue: any) : Promise<void> {
@@ -170,12 +162,12 @@ suite('Jupyter notebook tests', () => {
         }
     }
 
-    function testMimeTypes(types : {code: string; mimeType: string; result: any, cellType: string; verifyValue(data: any): void}[]) {
+    function testMimeTypes(types : {code: string; mimeType: string; result: any; cellType: string; verifyValue(data: any): void}[]) {
         runTest('MimeTypes', async () => {
             // Prefill with the output (This is only necessary for mocking)
             types.forEach(t => {
                 addMockData(t.code, t.result, t.mimeType, t.cellType);
-            })
+            });
 
             // Test all mime types together so we don't have to startup and shutdown between
             // each
@@ -234,7 +226,7 @@ suite('Jupyter notebook tests', () => {
         }
     }
 
-    function addInterruptableMockData(code: string, resultGenerator: (c: CancellationToken) => Promise<{result: string, haveMore: boolean}>) {
+    function addInterruptableMockData(code: string, resultGenerator: (c: CancellationToken) => Promise<{result: string; haveMore: boolean}>) {
         if (ioc.mockJupyter) {
             ioc.mockJupyter.addContinuousOutputCell(code, resultGenerator);
         }
@@ -442,7 +434,7 @@ suite('Jupyter notebook tests', () => {
         assert.ok(await testCancelableMethod((t: CancellationToken) => jupyterExecution.isImportSupported(t), 'Cancel did not cancel isImport after {0}ms', true));
      });
 
-    async function interruptExecute(server: INotebookServer, code: string, interruptMs: number, sleepMs: number) : Promise<InterruptResult> {
+    async function interruptExecute(server: INotebookServer | undefined, code: string, interruptMs: number, sleepMs: number) : Promise<InterruptResult> {
         let interrupted = false;
         let finishedBefore = false;
         const finishedPromise = createDeferred();

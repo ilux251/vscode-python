@@ -1,63 +1,35 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 'use strict';
-import { JSONObject } from '@phosphor/coreutils/lib/json';
-import { assert } from 'chai';
+import { nbformat } from '@jupyterlab/coreutils';
 import * as fs from 'fs-extra';
 import * as os from 'os';
 import * as path from 'path';
 import { Observable } from 'rxjs/Observable';
-import { anyString, anything, instance, match, mock, when } from 'ts-mockito';
-import { Matcher } from 'ts-mockito/lib/matcher/type/Matcher';
 import * as TypeMoq from 'typemoq';
 import * as uuid from 'uuid/v4';
-import { Disposable, Event, EventEmitter } from 'vscode';
-
-import { PythonSettings } from '../../client/common/configSettings';
-import { ConfigurationService } from '../../client/common/configuration/service';
-import { Logger } from '../../client/common/logger';
-import { FileSystem } from '../../client/common/platform/fileSystem';
-import { IFileSystem, TemporaryFile } from '../../client/common/platform/types';
-import { ProcessServiceFactory } from '../../client/common/process/processFactory';
-import { PythonExecutionFactory } from '../../client/common/process/pythonExecutionFactory';
-import {
-    ExecutionResult,
-    IProcessService,
-    IPythonExecutionService,
-    ObservableExecutionResult,
-    Output,
-    IProcessServiceFactory,
-    IPythonExecutionFactory
-} from '../../client/common/process/types';
-import { IAsyncDisposableRegistry, IConfigurationService, IDisposableRegistry, ILogger } from '../../client/common/types';
-import { Architecture } from '../../client/common/utils/platform';
-import { EXTENSION_ROOT_DIR } from '../../client/constants';
-import { JupyterExecution } from '../../client/datascience/jupyter/jupyterExecution';
-import { ICell, IConnection, IJupyterKernelSpec, INotebookServer, InterruptResult, IJupyterSessionManager, IJupyterSession, CellState } from '../../client/datascience/types';
-import { InterpreterType, PythonInterpreter, IInterpreterService } from '../../client/interpreter/contracts';
-import { InterpreterService } from '../../client/interpreter/interpreterService';
-import { CondaService } from '../../client/interpreter/locators/services/condaService';
-import { KnownSearchPathsForInterpreters } from '../../client/interpreter/locators/services/KnownPathsService';
-import { ServiceContainer } from '../../client/ioc/container';
-import { getOSType, OSType } from '../common';
-import { noop, sleep } from '../core';
-import { IServiceManager } from '../../client/ioc/types';
+import { EventEmitter } from 'vscode';
 import { CancellationToken } from 'vscode-jsonrpc';
+
 import { Cancellation } from '../../client/common/cancellation';
-import { nbformat } from '@jupyterlab/coreutils';
+import { PythonSettings } from '../../client/common/configSettings';
+import { ExecutionResult, IProcessServiceFactory, IPythonExecutionFactory, Output } from '../../client/common/process/types';
+import { IAsyncDisposableRegistry, IConfigurationService } from '../../client/common/types';
+import { EXTENSION_ROOT_DIR } from '../../client/constants';
 import { generateCells } from '../../client/datascience/cellFactory';
-import { KernelMessage, Kernel } from '@jupyterlab/services';
-import { createDeferred, Deferred } from '../../client/common/utils/async';
-import { MockPythonService } from './mockPythonService';
-import { MockProcessService } from './mockProcessService';
 import { concatMultilineString } from '../../client/datascience/common';
+import { IConnection, IJupyterKernelSpec, IJupyterSession, IJupyterSessionManager } from '../../client/datascience/types';
+import { IInterpreterService, PythonInterpreter } from '../../client/interpreter/contracts';
+import { IServiceManager } from '../../client/ioc/types';
+import { noop, sleep } from '../core';
 import { MockJupyterSession } from './mockJupyterSession';
-import { tagged } from 'inversify';
+import { MockProcessService } from './mockProcessService';
+import { MockPythonService } from './mockPythonService';
 
 // tslint:disable:no-any no-http-string no-multiline-string max-func-body-length
 
 const MockJupyterTimeDelay = 10;
-const LineFeedRegEx = /(\r\n|\n)/g
+const LineFeedRegEx = /(\r\n|\n)/g;
 
 export enum SupportedCommands {
     none = 0,
@@ -68,13 +40,11 @@ export enum SupportedCommands {
     all = 0xFFFF
 }
 
-
-
 // This class is used to mock talking to jupyter. It mocks
 // the process services, the interpreter services, the python services, and the jupyter session
 export class MockJupyterManager implements IJupyterSessionManager {
     private pythonExecutionFactory = this.createTypeMoq<IPythonExecutionFactory>('Python Exec Factory');
-    private processServiceFactory = this.createTypeMoq<IProcessServiceFactory>('Process Exec Factory');;
+    private processServiceFactory = this.createTypeMoq<IProcessServiceFactory>('Process Exec Factory');
     private processService: MockProcessService = new MockProcessService();
     private interpreterService = this.createTypeMoq<IInterpreterService>('Interpreter Service');
     private asyncRegistry : IAsyncDisposableRegistry;
@@ -84,7 +54,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
     private activeInterpreter: PythonInterpreter | undefined;
     private sessionTimeout: number | undefined;
     private cellDictionary = {};
-    private kernelSpecs : {name: string, dir: string}[] = [];
+    private kernelSpecs : {name: string; dir: string}[] = [];
 
     constructor(serviceManager: IServiceManager) {
         // Save async registry. Need to stick servers created into it
@@ -106,7 +76,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
         });
         // Listen to configuration changes like the real interpreter service does so that we fire our settings changed event
         const configService = serviceManager.get<IConfigurationService>(IConfigurationService);
-        if (configService && configService != null) {
+        if (configService && configService !== null) {
             (configService.getSettings() as PythonSettings).addListener('change', this.onConfigChanged);
         }
 
@@ -117,6 +87,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
         serviceManager.addSingletonInstance<IProcessServiceFactory>(IProcessServiceFactory, this.processServiceFactory.object);
 
         // Setup our default kernel spec (this is just a dummy value)
+        // tslint:disable-next-line:no-octal-literal
         this.kernelSpecs.push({name: '0e8519db-0895-416c-96df-fa80131ecea0', dir: 'C:\\Users\\rchiodo\\AppData\\Roaming\\jupyter\\kernels\\0e8519db-0895-416c-96df-fa80131ecea0'});
 
         // Setup our default cells that happen for everything
@@ -143,7 +114,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
         const pythonService = new MockPythonService(interpreter);
         this.pythonServices.push(pythonService);
         this.pythonExecutionFactory.setup(f => f.create(TypeMoq.It.is(o => {
-            return o && o.pythonPath && o.pythonPath === interpreter.path;
+            return o && o.pythonPath ? o.pythonPath === interpreter.path : false;
         }))).returns(() => Promise.resolve(pythonService));
         this.setupSupportedPythonService(pythonService, interpreter, supportedCommands, notebookStdErr);
 
@@ -158,25 +129,25 @@ export class MockJupyterManager implements IJupyterSessionManager {
         this.setupPathProcessService(jupyterPath, this.processService, supportedCommands, notebookStdErr);
     }
 
-    public addError(code:string, message: string) {
+    public addError(code: string, message: string) {
         // Turn the message into an nbformat.IError
         const result: nbformat.IError = {
             output_type: 'error',
             ename: message,
             evalue: message,
             traceback: []
-        }
+        };
 
         this.addCell(code, result);
     }
 
-    public addContinuousOutputCell(code: string, resultGenerator: (cancelToken: CancellationToken) => Promise<{result: string, haveMore: boolean}>) {
+    public addContinuousOutputCell(code: string, resultGenerator: (cancelToken: CancellationToken) => Promise<{result: string; haveMore: boolean}>) {
         const cells = generateCells(code, 'foo.py', 1, true);
         cells.forEach(c => {
             const key = concatMultilineString(c.data.source).replace(LineFeedRegEx, '');
             if (c.data.cell_type === 'code') {
                 const taggedResult = {
-                    output_type: 'generator',
+                    output_type: 'generator'
                 };
                 const data: nbformat.ICodeCell = c.data as nbformat.ICodeCell;
                 data.outputs = [...data.outputs, taggedResult];
@@ -227,8 +198,9 @@ export class MockJupyterManager implements IJupyterSessionManager {
         this.asyncRegistry.push(connInfo);
         this.asyncRegistry.push(kernelSpec);
         if (this.sessionTimeout && cancelToken) {
+            const localTimeout = this.sessionTimeout;
             return Cancellation.race(async () => {
-                await sleep(this.sessionTimeout);
+                await sleep(localTimeout);
                 return new MockJupyterSession(this.cellDictionary, MockJupyterTimeDelay);
             }, cancelToken);
         } else {
@@ -245,12 +217,11 @@ export class MockJupyterManager implements IJupyterSessionManager {
     }
 
     private createStreamResult(str: string) : nbformat.IStream {
-        const stream : nbformat.IStream = {
+        return {
             output_type: 'stream',
             name: 'stdout',
             text: str
         };
-        return stream;
     }
 
     private massageCellResult(
@@ -261,31 +232,28 @@ export class MockJupyterManager implements IJupyterSessionManager {
         // See if undefined or string or number
         if (!result) {
             // This is an empty execute result
-            const massaged : nbformat.IExecuteResult = {
+            return {
                 output_type: 'execute_result',
                 execution_count: 1,
                 data: {},
                 metadata : {}
             };
-            return massaged;
         } else if (typeof result === 'string') {
             const data = {};
             data[mimeType ? mimeType : 'text/plain'] = result;
-            const massaged: nbformat.IExecuteResult = {
+            return {
                 output_type: 'execute_result',
                 execution_count: 1,
                 data: data,
                 metadata: {}
             };
-            return massaged;
         } else if (typeof result === 'number') {
-            const massaged : nbformat.IExecuteResult = {
+            return {
                 output_type: 'execute_result',
                 execution_count: 1,
                 data: { 'text/plain' : result.toString() },
                 metadata : {}
             };
-            return massaged;
         } else {
             return result;
         }
@@ -326,16 +294,17 @@ export class MockJupyterManager implements IJupyterSessionManager {
 
     private setupPythonServiceExecObservable(service: MockPythonService, module: string, args: (string | RegExp)[], stderr: string[], stdout: string[]) {
         service.addExecModuleObservableResult(module, args, () => {
-        return {
-            proc: undefined,
-            out: new Observable<Output<string>>(subscriber => {
-                stderr.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-                stdout.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-            }),
-            dispose: () => {
-                noop();
-            }
-        }});
+            return {
+                proc: undefined,
+                out: new Observable<Output<string>>(subscriber => {
+                    stderr.forEach(s => subscriber.next({ source: 'stderr', out: s }));
+                    stdout.forEach(s => subscriber.next({ source: 'stderr', out: s }));
+                }),
+                dispose: () => {
+                    noop();
+                }
+            };
+        });
     }
 
     private setupProcessServiceExec(service: MockProcessService, file: string, args: (string | RegExp)[], result: () => Promise<ExecutionResult<string>>) {
@@ -344,16 +313,17 @@ export class MockJupyterManager implements IJupyterSessionManager {
 
     private setupProcessServiceExecObservable(service: MockProcessService, file: string, args: (string | RegExp)[], stderr: string[], stdout: string[]) {
         service.addExecObservableResult(file, args, () => {
-        return {
-            proc: undefined,
-            out: new Observable<Output<string>>(subscriber => {
-                stderr.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-                stdout.forEach(s => subscriber.next({ source: 'stderr', out: s }));
-            }),
-            dispose: () => {
-                noop();
-            }
-        }});
+            return {
+                proc: undefined,
+                out: new Observable<Output<string>>(subscriber => {
+                    stderr.forEach(s => subscriber.next({ source: 'stderr', out: s }));
+                    stdout.forEach(s => subscriber.next({ source: 'stderr', out: s }));
+                }),
+                dispose: () => {
+                    noop();
+                }
+            };
+        });
     }
 
     private setupSupportedPythonService(service: MockPythonService, workingPython: PythonInterpreter, supportedCommands: SupportedCommands, notebookStdErr?: string[]) {
@@ -362,7 +332,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
             this.setupPythonServiceExec(service, 'ipykernel', ['install', '--user', '--name', /\w+-\w+-\w+-\w+-\w+/, '--display-name', `'Python Interactive'`], () => {
                 const spec = this.addKernelSpec(workingPython.path);
                 return Promise.resolve({ stdout: `somename ${path.dirname(spec)}` });
-            })
+            });
         }
         if ((supportedCommands & SupportedCommands.nbconvert) === SupportedCommands.nbconvert) {
             this.setupPythonServiceExec(service, 'jupyter', ['nbconvert', '--version'], () => Promise.resolve({ stdout: '1.1.1.1' }));
@@ -439,7 +409,7 @@ export class MockJupyterManager implements IJupyterSessionManager {
                 return Promise.resolve({stdout: results});
             });
             this.setupProcessServiceExecObservable(service, jupyterPath, ['kernelspec', 'list'], [], []);
-            this.setupProcessServiceExec(service, jupyterPath, ['kernelspec', '--version'],() =>  Promise.resolve({ stdout: '1.1.1.1' }));
+            this.setupProcessServiceExec(service, jupyterPath, ['kernelspec', '--version'], () =>  Promise.resolve({ stdout: '1.1.1.1' }));
             this.setupProcessServiceExec(service, 'jupyter', ['kernelspec', '--version'], () => Promise.resolve({ stdout: '1.1.1.1' }));
         } else {
             this.setupProcessServiceExec(service, jupyterPath, ['kernelspec', '--version'], () => Promise.reject());

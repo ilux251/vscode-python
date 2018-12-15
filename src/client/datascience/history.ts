@@ -25,6 +25,7 @@ import { EXTENSION_ROOT_DIR } from '../common/constants';
 import { ContextKey } from '../common/contextKey';
 import { IFileSystem } from '../common/platform/types';
 import { IConfigurationService, IDisposableRegistry, ILogger } from '../common/types';
+import { createDeferred } from '../common/utils/async';
 import * as localize from '../common/utils/localize';
 import { IInterpreterService } from '../interpreter/contracts';
 import { captureTelemetry, sendTelemetryEvent } from '../telemetry';
@@ -43,7 +44,6 @@ import {
     InterruptResult,
     IStatusProvider
 } from './types';
-import { createDeferred } from '../common/utils/async';
 
 export enum SysInfoReason {
     Start,

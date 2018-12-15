@@ -1,32 +1,31 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 'use strict';
-import { nbformat } from '@jupyterlab/coreutils';
-import { inject, injectable } from 'inversify';
-import * as uuid from 'uuid/v4';
+import {
+    Contents,
+    ContentsManager,
+    Kernel,
+    KernelMessage,
+    ServerConnection,
+    Session,
+    SessionManager
+} from '@jupyterlab/services';
+import { JSONObject } from '@phosphor/coreutils';
+import { Slot } from '@phosphor/signaling';
+import { Event, EventEmitter } from 'vscode';
+import { CancellationToken } from 'vscode-jsonrpc';
 
-import * as os from 'os';
-import * as path from 'path';
-import { IWorkspaceService } from '../../common/application/types';
-import { IFileSystem } from '../../common/platform/types';
-import { ILogger } from '../../common/types';
+import { Cancellation } from '../../common/cancellation';
+import { sleep } from '../../common/utils/async';
 import * as localize from '../../common/utils/localize';
 import { noop } from '../../common/utils/misc';
-import { CodeSnippits, RegExpValues } from '../constants';
-import { CellState, ICell, IJupyterExecution, INotebookExporter, ISysInfo, IJupyterSessionManager, IConnection, IJupyterSession, IJupyterKernelSpec } from '../types';
-import { Session, SessionManager, ContentsManager, Contents, ServerConnection, Kernel, KernelMessage } from '@jupyterlab/services';
-import { CancellationToken } from 'vscode-jsonrpc';
-import { Cancellation } from '../../common/cancellation';
-import { Event, EventEmitter } from 'vscode';
-import { Slot } from '@phosphor/signaling';
-import { JSONObject } from '@phosphor/coreutils';
-import { sleep } from '../../common/utils/async';
+import { IConnection, IJupyterKernelSpec, IJupyterSession } from '../types';
 
 export class JupyterSession implements IJupyterSession {
-    private connInfo: IConnection;
+    private connInfo: IConnection | undefined;
     private kernelSpec: IJupyterKernelSpec | undefined;
     private sessionManager : SessionManager | undefined;
-    private session: Session.ISession;
+    private session: Session.ISession | undefined;
     private contentsManager: ContentsManager | undefined;
     private notebookFile: Contents.IModel | undefined;
     private onRestartedEvent : EventEmitter<void> = new EventEmitter<void>();
@@ -80,11 +79,15 @@ export class JupyterSession implements IJupyterSession {
         return this.session && this.session.kernel ? this.session.kernel.interrupt() : Promise.resolve();
     }
 
-    public requestExecute(content: KernelMessage.IExecuteRequest, disposeOnDone?: boolean, metadata?: JSONObject) : Kernel.IFuture {
+    public requestExecute(content: KernelMessage.IExecuteRequest, disposeOnDone?: boolean, metadata?: JSONObject) : Kernel.IFuture | undefined {
         return this.session && this.session.kernel ? this.session.kernel.requestExecute(content, disposeOnDone, metadata) : undefined;
     }
 
     public async connect(cancelToken?: CancellationToken) : Promise<void> {
+        if (!this.connInfo) {
+            throw new Error(localize.DataScience.sessionDisposed());
+        }
+
         // First connect to the sesssion manager
         const serverSettings = ServerConnection.makeSettings(
             {

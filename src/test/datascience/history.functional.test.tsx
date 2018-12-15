@@ -15,19 +15,19 @@ import {
     WebPanelMessage,
 } from '../../client/common/application/types';
 import { createDeferred } from '../../client/common/utils/async';
+import { Architecture } from '../../client/common/utils/platform';
 import { EditorContexts, HistoryMessages } from '../../client/datascience/constants';
 import { IHistoryProvider, IJupyterExecution } from '../../client/datascience/types';
+import { InterpreterType, PythonInterpreter } from '../../client/interpreter/contracts';
 import { Cell } from '../../datascience-ui/history-react/cell';
 import { MainPanel } from '../../datascience-ui/history-react/MainPanel';
 import { IVsCodeApi } from '../../datascience-ui/react-common/postOffice';
 import { sleep } from '../core';
 import { DataScienceIocContainer } from './dataScienceIocContainer';
-import { waitForUpdate } from './reactHelpers';
-import { PythonInterpreter, InterpreterType } from '../../client/interpreter/contracts';
-import { Architecture } from '../../client/common/utils/platform';
 import { SupportedCommands } from './mockJupyterManager';
+import { waitForUpdate } from './reactHelpers';
 
-// tslint:disable-next-line:max-func-body-length
+// tslint:disable-next-line:max-func-body-length no-any
 suite('History output tests', () => {
     const disposables: Disposable[] = [];
     let jupyterExecution: IJupyterExecution;
@@ -119,7 +119,8 @@ suite('History output tests', () => {
         }
     }
 
-    function runMountedTest(name: string, testFunc: (wrapper: ReactWrapper<any, Readonly<{}>, React.Component<{}, {}, any>>) => Promise<void>) {
+    // tslint:disable-next-line:no-any
+    function runMountedTest(name: string, testFunc: (wrapper: ReactWrapper<any, Readonly<{}>, React.Component>) => Promise<void>) {
         test(name, async () => {
             // Create our main panel and tie it into the JSDOM. Ignore progress so we only get a single render
             const wrapper = mount(<MainPanel theme='vscode-light' ignoreProgress={true} skipDefault={true} />);

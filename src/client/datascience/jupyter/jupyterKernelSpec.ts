@@ -1,11 +1,12 @@
-import { IJupyterKernelSpec } from "../types";
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 'use strict';
+import { Kernel } from '@jupyterlab/services';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { Kernel } from "@jupyterlab/services";
-import { noop } from "../../common/utils/misc";
+
+import { noop } from '../../common/utils/misc';
+import { IJupyterKernelSpec } from '../types';
 
 const IsGuidRegEx = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

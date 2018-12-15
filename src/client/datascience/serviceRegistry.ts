@@ -13,6 +13,7 @@ import { JupyterExecution } from './jupyter/jupyterExecution';
 import { JupyterExporter } from './jupyter/jupyterExporter';
 import { JupyterImporter } from './jupyter/jupyterImporter';
 import { JupyterServer } from './jupyter/jupyterServer';
+import { JupyterSessionManager } from './jupyter/jupyterSessionManager';
 import { StatusProvider } from './statusProvider';
 import {
     ICodeCssGenerator,
@@ -23,14 +24,12 @@ import {
     IHistory,
     IHistoryProvider,
     IJupyterExecution,
+    IJupyterSessionManager,
     INotebookExporter,
     INotebookImporter,
     INotebookServer,
-    IStatusProvider,
-    IJupyterSessionManager,
-    IJupyterSession
+    IStatusProvider
 } from './types';
-import { JupyterSessionManager } from './jupyter/jupyterSessionManager';
 
 export function registerTypes(serviceManager: IServiceManager) {
     serviceManager.addSingleton<IDataScienceCodeLensProvider>(IDataScienceCodeLensProvider, DataScienceCodeLensProvider);

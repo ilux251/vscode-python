@@ -37,9 +37,9 @@ import { InterpreterService } from '../../client/interpreter/interpreterService'
 import { CondaService } from '../../client/interpreter/locators/services/condaService';
 import { KnownSearchPathsForInterpreters } from '../../client/interpreter/locators/services/KnownPathsService';
 import { ServiceContainer } from '../../client/ioc/container';
+import { ServiceManager } from '../../client/ioc/serviceManager';
 import { getOSType, OSType } from '../common';
 import { noop } from '../core';
-import { ServiceManager } from '../../client/ioc/serviceManager';
 import { MockJupyterManager } from './mockJupyterManager';
 
 // tslint:disable:no-any no-http-string no-multiline-string max-func-body-length
