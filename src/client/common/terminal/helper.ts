@@ -9,6 +9,7 @@ import { ITerminalManager, IWorkspaceService } from '../application/types';
 import '../extensions';
 import { IPlatformService } from '../platform/types';
 import { IConfigurationService } from '../types';
+import { BaseActivationCommandProvider } from './environmentActivationProviders/baseActivationProvider';
 import { CondaActivationCommandProvider } from './environmentActivationProviders/condaActivationProvider';
 import { ITerminalActivationCommandProvider, ITerminalHelper, TerminalShellType } from './types';
 
@@ -99,7 +100,7 @@ export class TerminalHelper implements ITerminalHelper {
         }
 
         // Search from the list of providers.
-        const providers = this.serviceContainer.getAll<ITerminalActivationCommandProvider>(ITerminalActivationCommandProvider);
+        const providers = this.serviceContainer.getAll<BaseActivationCommandProvider>(ITerminalActivationCommandProvider);
         const supportedProviders = providers.filter(provider => provider.isShellSupported(terminalShellType));
 
         for (const provider of supportedProviders) {

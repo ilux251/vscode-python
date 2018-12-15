@@ -14,7 +14,7 @@ export abstract class BaseActivationCommandProvider implements ITerminalActivati
     constructor(protected readonly serviceContainer: IServiceContainer) { }
 
     public abstract isShellSupported(targetShell: TerminalShellType): boolean;
-    public getActivationCommands(resource: Uri | undefined, targetShell: TerminalShellType): Promise<string[] | undefined> {
+    public async getActivationCommands(resource: Uri | undefined, targetShell: TerminalShellType): Promise<string[] | undefined> {
         const pythonPath = this.serviceContainer.get<IConfigurationService>(IConfigurationService).getSettings(resource).pythonPath;
         // tslint:disable-next-line:no-console
         console.log('In baseActivation.ts', pythonPath);
